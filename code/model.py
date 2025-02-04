@@ -1,8 +1,6 @@
 import torch
 from torch import nn
 from torch.nn import functional as fn
-#from Threed_protein import *
-#from Threed_drug import *
 import traceback
 from collections import defaultdict
 import numpy as np
@@ -98,14 +96,12 @@ class ABCModel(nn.Module):
             return loss
 
 class Model(ABCModel):
-    def __init__(self, entity_num, drug_num, protein_num, relation_num, embed_dim,model_args, enable_augmentation,
-                gumbel_args, weight_decay, p_drop, score_fun='dot', device='cpu', modality = 3, dataset_name = 'BioSNAP',
+    def __init__(self, entity_num, drug_num, protein_num, embed_dim, p_drop, score_fun='dot', device='cpu', modality = 1, dataset_name = 'BioSNAP',
                 train_entity2index=None, path_2_pretrained_embedding = None, drug_pretrained_dim=None, gene_sequence_dim = None):
 
         super(Model, self).__init__()
         self.entity_num = entity_num
         self.drug_num = drug_num # drug : 4400 protein : 2000 ; train entity2index : id -> index
-        self.relation_num = relation_num
         self.embed_dim = embed_dim
         self.modality = modality
         self.dataset_name = dataset_name
@@ -116,39 +112,14 @@ class Model(ABCModel):
         self.gene_sequence_dim = gene_sequence_dim
         #self.enable_pretrained_init = True        
         init = torch.zeros((entity_num, embed_dim))
-        init_r = torch.zeros((relation_num, embed_dim))
         gain = nn.init.calculate_gain('relu')
         torch.nn.init.xavier_normal_(init, gain=gain)
-        torch.nn.init.xavier_normal_(init_r, gain=gain)
         self.entity_embed = nn.Parameter(init) # 6400 x embed_dim
-        
-        
-        #self.relation_embed = nn.Parameter(init_r)
-        self.enable_augmentation = enable_augmentation
-        self.gumbel_args = gumbel_args
-        if enable_augmentation:
-            index = [i for i in range(entity_num)]
-            np.random.shuffle(index)
-            init_augment = init[index]
-            self.augment_entity_embed = nn.Parameter(init_augment)
-            self.augment_relation_embed = nn.Parameter(init_r)
-
         self.entity_num = entity_num
         self.protein_num = protein_num
-        self.relation_num = relation_num
         self.embed_dim = embed_dim
-        self.layer_num = model_args[0]
-        self.head_num = model_args[1]
-        self.weight_decay = weight_decay
         self.p_drop = p_drop
         self.test_indices_to_train_indices = None
-
-        """
-        self.kgcnh_layer = nn.ModuleList()
-        for _ in range(self.layer_num):
-            self.kgcnh_layer.append(
-                KGCNH((entity_num, embed_dim), self.head_num, p_drop, enable_augmentation, gumbel_args))
-        """
         self.score_fun = score_fun
         self.mlp = None
         self.reset_parameters()
@@ -382,15 +353,21 @@ class Model(ABCModel):
                 num_heads = h_embed.shape[1]
                 pos_t_embed = pos_t_embed.repeat(1, num_heads, 1)
             h_pos_embed = torch.cat([h_embed, pos_t_embed],dim=-1)
-            v_f = h_pos_embed
-            for i, l in enumerate(self.predictor1):
-                if i==(len(self.predictor1)-1):
-                    feat = v_f
-                    score = l(v_f)
-                else:
-                    v_f = l(v_f)
-                    v_f = fn.relu(self.dropout(v_f))
-            return score
+            num_pos = h_pos_embed.shape[1]
+            scores = []
+            for i in range(num_pos) :
+                v_f = h_pos_embed[:,i,:]
+                score = None
+                for i, l in enumerate(self.predictor1):
+                    if i==(len(self.predictor1)-1):
+                        feat = v_f
+                        score = l(v_f)
+                    else:
+                        v_f = l(v_f)
+                        v_f = fn.relu(self.dropout(v_f))
+                scores.append(score)
+            scores = torch.cat(scores, dim = 1)
+            return scores
         if pos_t_embed.numel() != 0 :
             pos_score = calc_score(h_embed, pos_t_embed)
         if n_t_embed.numel() != 0 :

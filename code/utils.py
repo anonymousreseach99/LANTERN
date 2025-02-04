@@ -14,55 +14,11 @@ from sklearn.metrics import auc, roc_auc_score, precision_recall_curve
 os.environ["CUDA_VISIBLE_DEVICES"] = '6,7'
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-"""
 def calc_auc(labels, scores):
-    #print(29, 'utils labels and score shape :' , labels, scores)
-    fpr, tpr, _ = metrics.roc_curve(labels, scores)
-    auc = metrics.auc(fpr, tpr)
-    return auc
-
-"""
-def calc_auc(labels, scores):
-    print(25, 'utils', len(labels))
-    # Sort scores and corresponding labels
-
-    sorted_indices = np.argsort(scores)[::-1]
-    sorted_labels = np.array(labels)[sorted_indices]
-    
-    # Compute true positive and false positive rates
-    tps = np.cumsum(sorted_labels == 1)
-    fps = np.cumsum(sorted_labels == 0)
-
-    # Compute false positive rate and true positive rate
-    fpr = fps / fps[-1]  # Normalizing by the total number of negatives
-    tpr = tps / tps[-1]  # Normalizing by the total number of positives
-
-    # Compute the area under the curve (using trapezoidal rule)
-    auc = np.trapz(tpr, fpr)
     auc = roc_auc_score(labels, scores)
     return auc
 
-"""
 def calc_aupr(labels, scores):
-    precision, recall, _ = metrics.precision_recall_curve(labels, scores)
-    aupr = metrics.auc(recall, precision)
-    return aupr
-"""
-def calc_aupr(labels, scores):
-    # Sort scores and corresponding labels
-    sorted_indices = np.argsort(scores)[::-1]
-    sorted_labels = np.array(labels)[sorted_indices]
-    
-    # Compute true positives and false positives at each threshold
-    tps = np.cumsum(sorted_labels == 1)
-    fps = np.cumsum(sorted_labels == 0)
-    
-    # Compute precision and recall
-    precisions = tps / (tps + fps)
-    recalls = tps / tps[-1]  # Normalizing by the total number of positives
-
-    # Compute area under the precision-recall curve (using trapezoidal rule)
-    aupr = np.trapz(precisions, recalls)
     precision, recall, thresholds = precision_recall_curve(labels, scores)
     # Use AUC function to calculate the area under the curve of precision recall curve
     auc_precision_recall = auc(recall, precision)
@@ -162,57 +118,6 @@ def exclude_isolation_point(train_set, valid_set):
             exclusion_list.append(valid_triple)
             valid_set.remove(valid_triple)
     return valid_set, exclusion_list
-
-
-def generate_bi_coo_matrix(kg_triple):
-    row = []
-    data = []
-    col = []
-
-    def bi_direct(triplet):
-        h, r, t = triplet
-        row.append(h)
-        data.append(r)
-        col.append(t)
-        row.append(t)
-        data.append(r)
-        col.append(h)
-
-    for triple in kg_triple:
-        bi_direct(triple)
-    return [row, col], data
-
-
-
-def sample_gumbel(shape, device, lower_limit=1e-20, ):
-    """Sample from Gumbel(0, 1)"""
-    eps = torch.rand(shape).to(device)
-    return -torch.log(-torch.log(eps + lower_limit) + lower_limit)
-
-
-def gumbel_soft(weight, tau):
-    """
-    :param weight:  [n, x, 1]
-    :param tau: temperature
-    :return: [n, x, 1]
-    """
-    shape = weight.shape
-    device = weight.device
-    prob = weight
-    neg_prob = 1 - prob
-    prob = torch.cat((prob, neg_prob), dim=2)
-    prob = prob + 1e-20
-    eps = sample_gumbel(prob.shape, device)
-    probability = torch.log(prob) + eps
-    probability = probability / tau
-    probability = torch.softmax(probability, dim=2)
-    probability = probability[:, :, 0]
-    return probability.view(shape)
-
-
-def gumbel_scale(prob, gumbel_weight):
-    scale = 1 / torch.sum(prob * gumbel_weight, dim=1, keepdim=True)
-    return scale
 
 
 def calc_norm(x):

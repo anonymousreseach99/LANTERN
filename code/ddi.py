@@ -1,6 +1,6 @@
 import os
 import torch
-from utils import create_pyg_dataset, generate_bi_coo_matrix, generate_directed_coo_matrix, save_model, exclude_isolation_point,custom_collate
+from utils import save_model,custom_collate
 import argparse
 from data_loader import DataProcessor, DDI_DataProcessor, DrugProteinDataSet
 from torch.utils.data import DataLoader
@@ -11,65 +11,20 @@ from procedure import train, test
 import pickle
 import random
 
-kgcnh_path = os.path.dirname(os.path.dirname(__file__))
-kgdrp = os.path.dirname(kgcnh_path)
-biosnap_path = os.path.join(kgcnh_path, 'data', 'BioSNAP')
-davis_path = os.path.join(kgcnh_path, 'data', 'DAVIS')
-kiba_path = os.path.join(kgcnh_path, 'data', 'KIBA')
-yeast_path = os.path.join(kgcnh_path, 'data', 'yeast')
-bindingdb_path = os.path.join(kgcnh_path, 'data', 'BindingDB')
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="456")
-    parser.add_argument('--gpu', action='store_true', help='enable gpu')
-    parser.add_argument('--save_model', action='store_true', help='save_model')
-
-    parser.add_argument('--enable_gumbel', action='store_true', help='enable gumbel-softmax')
-    parser.add_argument('--enable_augmentation', action='store_true', help='enable_augmentation')
-    parser.add_argument('--save_path', nargs='?', default=os.path.join(kgdrp, 'log' , 'result.pkl'), help='Input save path.')
-    parser.add_argument('--data_path', nargs='?', default='./data/Hetionet',
-                        help='Input data path.')
-    #parser.add_argument('--score_fun', nargs='?', default='dot', help='Input data path.')
-    parser.add_argument('--score_fun', nargs='?', default='mlp', help='Input data path.')
-    parser.add_argument('--embed_dim', type=int, default=384,
-                        help="the embedding size entity and relation")
-    parser.add_argument('--seed', type=int, default=120) # 42, 85, 100
-    parser.add_argument('--valid_step', type=int, default=10)
-    parser.add_argument('--hop', type=int, default=1)
-    parser.add_argument('--epoch', type=int, default=100)
-    parser.add_argument('--layer_num', type=int, default=3,
-                        help="the layer num")
-    parser.add_argument('--neg_ratio', type=int, default=10)
-    parser.add_argument('--lr', type=float, default=0.0001,
-                        help="the learning rate")
-    parser.add_argument('--tau', type=float, default=1.3,
-                        help="the learning rate")
-    parser.add_argument('--amplitude', type=float, default=0.6,
-                        help="the learning rate")
-    parser.add_argument('--decay', type=float, default=1e-6,
-                        help="the weight decay for l2 regulation")
-    parser.add_argument('--dropout', type=float, default=0.2,
-                        help="using the dropout ratio")
-    parser.add_argument('--head_num', type=int, default=2,
-                        help="the head num")
-    parser.add_argument('--modality', type=int, default=1)
-    #parser.add_argument('--dataset_name', type=str, default="BioSNAP")
-    #parser.add_argument('--train_path', default=biosnap_path)
-    #parser.add_argument('--valid_path', default=biosnap_path)
-    #parser.add_argument('--test_path', default=biosnap_path)
-    parser.add_argument('--dataset_name', type=str, default="yeast")
-    parser.add_argument('--train_path', default=yeast_path)
-    parser.add_argument('--valid_path', default=yeast_path)
-    parser.add_argument('--test_path', default=yeast_path)
-    return parser.parse_args()
+code_path = os.path.dirname(os.path.dirname(__file__))
+lantern_path = os.path.dirname(code_path)
+biosnap_path = os.path.join(lantern_path, 'data', 'BioSNAP')
+davis_path = os.path.join(lantern_path, 'data', 'DAVIS')
+kiba_path = os.path.join(lantern_path, 'data', 'KIBA')
+yeast_path = os.path.join(lantern_path, 'data', 'yeast')
+bindingdb_path = os.path.join(lantern_path, 'data', 'BindingDB')
+deepddi_path = os.path.join(lantern_path, 'data', 'DeepDDI')
 
 def main(args) :
-    hop = args.hop
     seed = args.seed
     epoch = args.epoch
     save_path = args.save_path
-    #save_model_sign = args.save_model
-    save_model_sign = True
+    save_model_sign = args.save_model
     print(21, "MAIN", save_model_sign)
     model_save_dir = os.path.split(save_path)[0]
     if not os.path.exists(model_save_dir):
@@ -115,17 +70,9 @@ def main(args) :
     test_triples_data = test_data.load_data()
 
     """
-    Load related knowledge graph for message passing and update
-    """
-    train_kg_triples = train_triples_data # ~ others, if hop is not None, retrieve the relations related to entities in triples_data
-    valid_kg_triples = valid_triples_data
-    test_kg_triples = test_triples_data
-
-    """
-    Model and Graph arguments
+    Model arguments
     """
     score_fun = args.score_fun
-    model_args = (args.layer_num, args.head_num)
     entity_num = train_data._calc_drug_protein_num()
     print(54, 'main', entity_num)
     #print(type(train_data.get_protein_num))
@@ -138,12 +85,6 @@ def main(args) :
     print(61, 'main : ', f'entity_num : {entity_num}, protein_num : {protein_num}, drug_num : {drug_num}')
     
     train_set_len = len(train_triples_data)
-
-    valid_triples_data, valid_exclusion_list = exclude_isolation_point(train_triples_data, valid_triples_data)
-    train_triples_data += valid_exclusion_list
-
-    test_triples_data, test_exclusion_list = exclude_isolation_point(train_triples_data, test_triples_data)
-    train_triples_data += test_exclusion_list
 
     train_set = DrugProteinDataSet(train_triples_data, args.neg_ratio) # previously, train_data contains 'treats' and 'others' relation.
     print(93, 'main', train_set.len_head)
@@ -162,9 +103,7 @@ def main(args) :
     code_folder = os.path.dirname(__file__)
     kgcnh_folder = os.path.dirname(code_folder)
     path2_pretrained_embeddings = os.path.join(os.path.dirname(kgcnh_folder), 'embeddings')
-    model = DDI_Model(entity_num, drug_num, protein_num, relation_num, args.embed_dim,
-                      model_args, args.enable_augmentation,
-                      (args.enable_gumbel, args.tau, args.amplitude / args.epoch), args.decay, args.dropout,
+    model = DDI_Model(entity_num, drug_num, protein_num, relation_num, args.embed_dim, args.dropout,
                       score_fun, device, args.modality, args.dataset_name, train_entity2index, 
                       path2_pretrained_embeddings, drug_pretrained_dim, gene_sequence_dim).to(device)
     print("DEVICE : ", device)
@@ -213,9 +152,7 @@ def main(args) :
                 result['model'] = model
 
                 print(164, 'MAIN')
-                model_arg = [entity_num, drug_num, protein_num, relation_num, args.embed_dim,
-                      model_args, args.enable_augmentation,
-                      (args.enable_gumbel, args.tau, args.amplitude / args.epoch), args.decay, args.dropout,
+                model_arg = [entity_num, drug_num, protein_num, relation_num, args.embed_dim, args.dropout,
                       score_fun, device, args.modality, args.dataset_name, train_entity2index, 
                       path2_pretrained_embeddings, drug_pretrained_dim, gene_sequence_dim]
                 res = {'model': model, 'model_arg' : model_arg}
@@ -230,6 +167,24 @@ def main(args) :
     print('\n', 'TEST : ', auc, aupr)
 
 if __name__ == '__main__':
-    args = parse_args()
+    parser = argparse.ArgumentParser(description="456")
+    parser.add_argument('--dataset_name', type=str, default="DeepDDI")
+    parser.add_argument('--data_path', default=deepddi_path)
+    parser.add_argument('--embed_dim', type=int, default=384,
+                        help="the embedding size entity and relation")
+    parser.add_argument('--seed', type=int, default=120) # 42, 85, 100
+    parser.add_argument('--valid_step', type=int, default=10)
+    parser.add_argument('--epoch', type=int, default=100)
+    parser.add_argument('--lr', type=float, default=0.0001,
+                        help="the learning rate")
+    parser.add_argument('--dropout', type=float, default=0.1,
+                        help="using the dropout ratio")
+    parser.add_argument('--modality', type=int, default=1)
+    parser.add_argument('--save_model', type = bool, default = True, action='store_true', help='save_model')
+    parser.add_argument('--save_path', nargs='?', default=os.path.join(kgdrp, 'log' , 'result.pkl'), help='Input save path.')
+    parser.add_argument('--score_fun', nargs='?', default='transformer', help='Input data path.')
+    parser.add_argument('--drug_pretrained_dim', type=int, default = 768)
+    parser.add_argument('--protein_sequence_dim', type=int, default = 1024)
+    args = parser.parse_args()
     main(args)
     

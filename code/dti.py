@@ -1,23 +1,24 @@
 import os
 import torch
-from utils import create_pyg_dataset, generate_bi_coo_matrix, generate_directed_coo_matrix, save_model, exclude_isolation_point,custom_collate
+from utils import save_model, custom_collate
 import argparse
-from data_loader import DataProcessor, DrugProteinDataSet
+from data_loader import DataProcessor, DDI_DataProcessor, PPI_DataProcessor, DrugProteinDataSet
 from torch.utils.data import DataLoader
 import numpy as np
 from torch.optim import Adam, lr_scheduler, SGD
-from model import Model
+from model import Model, DDI_Model, PPI_Model
 from procedure import train, test
 import pickle
 import random
 
-kgcnh_path = os.path.dirname(os.path.dirname(__file__))
-kgdrp = os.path.dirname(kgcnh_path)
-biosnap_path = os.path.join(kgcnh_path, 'data', 'BioSNAP')
-davis_path = os.path.join(kgcnh_path, 'data', 'DAVIS')
-kiba_path = os.path.join(kgcnh_path, 'data', 'KIBA')
-yeast_path = os.path.join(kgcnh_path, 'data', 'yeast')
-bindingdb_path = os.path.join(kgcnh_path, 'data', 'BindingDB')
+code_path = os.path.dirname(os.path.dirname(__file__))
+lantern_path = os.path.dirname(code_path)
+biosnap_path = os.path.join(lantern_path, 'data', 'BioSNAP')
+davis_path = os.path.join(lantern_path, 'data', 'DAVIS')
+kiba_path = os.path.join(lantern_path, 'data', 'KIBA')
+yeast_path = os.path.join(lantern_path, 'data', 'yeast')
+bindingdb_path = os.path.join(lantern_path, 'data', 'BindingDB')
+deepddi_path = os.path.join(lantern_path, 'data', 'DeepDDI')
 
 def main(args) :
     seed = args.seed
@@ -40,11 +41,11 @@ def main(args) :
     """
     Processing from ID to indices
     """
-    train_data = DataProcessor(args.train_path, hop, mode="train")
+    train_data = DataProcessor(args.data_path, hop, mode="train")
     train_entity2index = train_data.entities2id 
-    valid_data = DataProcessor(args.valid_path, hop, mode="val")
+    valid_data = DataProcessor(args.data_path, hop, mode="val")
     valid_entity2index = valid_data.entities2id
-    test_data = DataProcessor(args.test_path, hop, mode="test")
+    test_data = DataProcessor(args.data_path, hop, mode="test")
     test_entity2index = test_data.entities2id
 
     """
@@ -69,17 +70,9 @@ def main(args) :
     test_triples_data = test_data.load_data()
 
     """
-    Load related knowledge graph for message passing and update
-    """
-    train_kg_triples = train_triples_data # ~ others, if hop is not None, retrieve the relations related to entities in triples_data
-    valid_kg_triples = valid_triples_data
-    test_kg_triples = test_triples_data
-
-    """
-    Model and Graph arguments
+    Model arguments
     """
     score_fun = args.score_fun
-    model_args = (args.layer_num, args.head_num)
     entity_num = train_data._calc_drug_protein_num()
     print(54, 'main', entity_num)
     #print(type(train_data.get_protein_num))
@@ -90,25 +83,8 @@ def main(args) :
     print(57, 'main', relation_num)
     entity_num = protein_num + drug_num
     print(61, 'main : ', f'entity_num : {entity_num}, protein_num : {protein_num}, drug_num : {drug_num}')
-    """
-    Creating the graph
-    """
-    # generate kg_graph
 
-    kg_coo, kg_relation = generate_bi_coo_matrix(train_kg_triples)
-    #augment_coo, augment_relation = generate_bi_coo_matrix(train_graph)
-
-    kg_graph = create_pyg_dataset(args.embed_dim, kg_coo, kg_relation).to(device)
-    #augment_graph = kg_graph
-
-    #train_set = [tuple(i) for i in np.array(train_triples_data).tolist()]
     train_set_len = len(train_triples_data)
-
-    valid_triples_data, valid_exclusion_list = exclude_isolation_point(train_triples_data, valid_triples_data)
-    train_triples_data += valid_exclusion_list
-
-    test_triples_data, test_exclusion_list = exclude_isolation_point(train_triples_data, test_triples_data)
-    train_triples_data += test_exclusion_list
 
     train_set = DrugProteinDataSet(train_triples_data, args.neg_ratio) # previously, train_data contains 'treats' and 'others' relation.
     print(93, 'main', train_set.len_head)
@@ -127,9 +103,7 @@ def main(args) :
     code_folder = os.path.dirname(__file__)
     kgcnh_folder = os.path.dirname(code_folder)
     path2_pretrained_embeddings = os.path.join(os.path.dirname(kgcnh_folder), 'embeddings')
-    model = Model(entity_num, drug_num, protein_num, relation_num, args.embed_dim,
-                      model_args, args.enable_augmentation,
-                      (args.enable_gumbel, args.tau, args.amplitude / args.epoch), args.decay, args.dropout,
+    model = Model(entity_num, drug_num, protein_num, args.embed_dim, args.dropout,
                       score_fun, device, args.modality, args.dataset_name, train_entity2index, 
                       path2_pretrained_embeddings, drug_pretrained_dim, gene_sequence_dim).to(device)
     
@@ -144,9 +118,6 @@ def main(args) :
 
     result = {'best_auc': 0, 'best_aupr': 0, 'epoch' : 0, 'model' : model, 'optimizer' : optimizer}
     
-    augment_graph = None
-    augment_relation = None
-    
     lr = args.lr
     for i in range(epoch):
         if i > 0 :
@@ -159,8 +130,7 @@ def main(args) :
         elif i == epoch * 0.8 :
             lr = 0.8 * lr
         
-        loss, reg_loss = train(model, train_data_loader, optimizer, device, lr, train_entity2index) # In-context learning ? Take the kg_graph (other relations related to training entities)
-                                                                        # as the context for drug and protein embedping.       
+        loss, reg_loss = train(model, train_data_loader, optimizer, device, lr, train_entity2index)   
         print("Line 109, FINISHED TRAINING", f"epoch {i}, loss : {loss}, reg_loss : {reg_loss}")
         if (i + 1) % args.valid_step == 0 :
             print("epoch:{},loss:{}, reg_loss:{}".format(i + 1, loss, reg_loss))
@@ -177,9 +147,7 @@ def main(args) :
                 result['model'] = model
 
                 print(164, 'MAIN')
-                model_arg = [entity_num, drug_num, protein_num, relation_num, args.embed_dim,
-                      model_args, args.enable_augmentation,
-                      (args.enable_gumbel, args.tau, args.amplitude / args.epoch), args.decay, args.dropout,
+                model_arg = [entity_num, drug_num, protein_num, args.embed_dim, args.dropout,
                       score_fun, device, args.modality, args.dataset_name, train_entity2index, 
                       path2_pretrained_embeddings, drug_pretrained_dim, gene_sequence_dim]
                 res = {'model': model, 'model_arg' : model_arg}

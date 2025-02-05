@@ -1,4 +1,4 @@
-# Data: https://drive.google.com/drive/folders/1SukKTPbuGUPHn5uIGfnBlh3Jhdgi8hcl?usp=sharing
+# Data: https://drive.google.com/drive/folders/1liqU_9XgJYENw9KQW6tLWWYylMVvoZaU?usp=drive_link
 ## Drug - target interaction (DTI) benchmark
 + DAVIS
 + KIBA
@@ -10,6 +10,6 @@
 
 
 # Pretrained weights
-Pretrained weights of all entities of all datasets can be found at : https://drive.google.com/drive/folders/1SukKTPbuGUPHn5uIGfnBlh3Jhdgi8hcl?usp=sharing
+Pretrained weights of all entities of all datasets can be found at : https://drive.google.com/drive/folders/1Dph9nUsovudogbIv4v8SuYCspcWdMfOI?usp=drive_link
 
 

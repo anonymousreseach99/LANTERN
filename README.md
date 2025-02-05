@@ -20,7 +20,7 @@ The main innovations we made away from LANTERN, but not limited to:
 ## Setup Environment
 Clone this repository and install dependencies:
 ```bash
-git clone https://github.com/HySonLab/LANTERN.git
+git clone https://github.com/anonymousreseach99/LANTERN.git
 cd LANTERN
 conda env create -f environment.yaml
 conda activate LANTERN

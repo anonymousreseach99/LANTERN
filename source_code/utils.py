@@ -8,11 +8,12 @@ from util_representations import load_relation_embed, load_entity_embed, get_bio
 from collections import defaultdict
 import json
 import pandas as pd
-from sklearn.metrics import auc, roc_auc_score, precision_recall_curve
+from sklearn.metrics import auc, roc_auc_score, precision_recall_curve, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score, matthews_corrcoef
 
-# Set visible devices and use cuda:0
-os.environ["CUDA_VISIBLE_DEVICES"] = '6,7'
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+def sigmoid(x):
+    """Apply sigmoid function to x."""
+    x = np.array(x)
+    return 1 / (1 + np.exp(-x))
 
 def calc_auc(labels, scores):
     auc = roc_auc_score(labels, scores)
@@ -25,6 +26,44 @@ def calc_aupr(labels, scores):
     aupr = auc_precision_recall
     return aupr
 
+def calc_other_metrics(y_true, y_pred):
+    """
+    Calculate accuracy, sensitivity (recall), specificity, precision, F1 score, and MCC.
+    
+    Args:
+        y_true (list or np.array): Ground truth labels (0 or 1).
+        y_pred (list or np.array): Predicted labels (0 or 1).
+    
+    Returns:
+        dict: A dictionary with calculated metrics.
+    """
+    # Confusion matrix
+    probabilities = sigmoid(y_pred)
+    
+    # Convert probabilities to binary predictions with a threshold of 0.5
+    y_pred = (probabilities >= 0.5).astype(int)
+
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+    
+    # Calculate metrics
+    accuracy = accuracy_score(y_true, y_pred)
+    sensitivity = recall_score(y_true, y_pred)  # same as recall
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+    precision = precision_score(y_true, y_pred)
+    f1 = f1_score(y_true, y_pred)
+    mcc = matthews_corrcoef(y_true, y_pred)
+    
+    # Return metrics as a dictionary
+    metrics = {
+        "accuracy": accuracy,
+        "sensitivity": sensitivity,
+        "specificity": specificity,
+        "precision": precision,
+        "f1_score": f1,
+        "mcc": mcc
+    }
+    
+    return metrics
 
 def save_model(result, path, mode='ab'):
     # Create the directory if it does not exist

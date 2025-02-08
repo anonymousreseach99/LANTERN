@@ -1,4 +1,4 @@
-name: gearnet
+name: LANTERN
 channels:
   - milagraph
   - conda-forge
@@ -210,4 +210,4 @@ dependencies:
       - urllib3==2.2.3
       - yacs==0.1.8
       - yarl==1.17.2
-prefix: /home/stuhcnga/miniforge3/envs/gearnet
+

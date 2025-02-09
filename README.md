@@ -30,7 +30,7 @@ conda activate LANTERN
 Files should be placed as the following folder structure:
 ```
 LANTERN
-├── code
+├── source_code
 │   ├──file.py ...
 ├── data
 │   ├── README.md
@@ -47,7 +47,7 @@ LANTERN
 
 First, ensure that pretrained weights and dataset for all entities in the dataset are properly located at LANTERN\data as guided in LANTERN\data\README.md .
 
-Second, cd code .
+Second, cd source_code .
 
 Finally, run the training script:
 ```
@@ -75,7 +75,7 @@ Please modify the dataset_name, path_to_dataset, and save_path according to your
 
 First, ensure that pretrained weights and dataset for all entities in the dataset are properly located at LANTERN\data as guided in LANTERN\data\README.md .
 
-Second, cd code .
+Second, cd source_code .
 
 Finally, run the training script:
 ```
@@ -100,7 +100,7 @@ python main.py \
 
 First, ensure that pretrained weights for all entities in the dataset are properly located at data\embedding\{dataset_name}.
 
-Second, cd code.
+Second, cd source_code.
 
 Finally, run the training script:
 ```
@@ -124,7 +124,7 @@ python main.py \
 Please modify the dataset_name, path_to_dataset, and save_path according to your experiments.
 
 ## Evaluation 
-First, cd code.
+First, cd source_code.
 Second, run the following script :
 ```
 python eval.py \
@@ -137,6 +137,8 @@ python eval.py \
 
 ## Predict interactions between a pair of entities
 ```
+First, cd source_code.
+Second, run the following script (under maintenance):
 python predict.py \
     --model_save_path path_to_checkpoint \
     --gpu True \
